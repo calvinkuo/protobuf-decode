@@ -212,7 +212,19 @@ class DelimitedField(Field):
                 return self.as_bytes()
 
     def as_message(self) -> Message:
-        return Message.from_bytes(self.raw)
+        msg = Message.from_bytes(self.raw)
+        stack = 0
+        for field in msg.fields:
+            if isinstance(field, GroupStartField):
+                stack += 1
+            elif isinstance(field, GroupEndField):
+                if stack > 0:
+                    stack -= 1
+                else:
+                    raise ValueError('found a GroupEndField without a matching GroupStartField')
+        if stack != 0:
+            raise ValueError('found a GroupStartField without a matching GroupEndField')
+        return msg
 
     def as_string(self) -> str:
         return self.raw.decode('utf-8')
@@ -236,7 +248,10 @@ class FixedNBitField(Field, ABC):
     raw: bytes
 
     def auto(self) -> int:
-        return self.as_signed()
+        try:
+            return self.as_signed()
+        except struct.error:
+            raise ValueError(f'could not unpack {self.raw!r} as signed')
 
     @abstractmethod
     def as_signed(self) -> int:
